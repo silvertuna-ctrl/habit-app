@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover：iPhoneの画面のはしっこ（ノッチの下など）まで使う -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- ホーム画面に追加したとき、アプリのように全画面で開くための設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="習慣">
+  <meta name="theme-color" content="#0b0b0d">
+  <title>習慣アプリ</title>
+
+  <!-- Tailwind CSS（いまはCDN版。Node.jsを入れたら、あとでビルド版に切りかえる） -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-[#0b0b0d] text-zinc-100 antialiased">
+  <div class="mx-auto max-w-md min-h-dvh px-4 pt-safe pb-28">
+
+    <!-- ===== ヘッダー：今日の日付 ===== -->
+    <header class="pt-6 pb-4">
+      <p id="today-label" class="text-sm text-zinc-400"></p>
+      <h1 class="text-2xl font-bold">今日の習慣</h1>
+    </header>
+
+    <!-- ===== 目標（いつも目に入るように一番上） ===== -->
+    <section class="grid gap-2 mb-6">
+      <button id="goal-month" class="goal-card" data-kind="month">
+        <span class="goal-label">🎯 <span id="goal-month-title"></span></span>
+        <span class="goal-text" id="goal-month-text"></span>
+      </button>
+      <button id="goal-year" class="goal-card" data-kind="year">
+        <span class="goal-label">🏆 <span id="goal-year-title"></span></span>
+        <span class="goal-text" id="goal-year-text"></span>
+      </button>
+    </section>
+
+    <!-- ===== 今日の達成状況 ===== -->
+    <div class="flex items-end justify-between mb-2">
+      <h2 class="text-sm font-semibold text-zinc-400">チェック</h2>
+      <p id="progress-label" class="text-sm text-zinc-400"></p>
+    </div>
+
+    <!-- ===== 習慣の一覧（app.js で中身を入れる） ===== -->
+    <ul id="habit-list" class="grid gap-2"></ul>
+
+    <p id="empty-message" class="hidden text-center text-zinc-500 py-10 leading-relaxed">
+      まだ習慣がありません。<br>下のボタンから追加しましょう！
+    </p>
+
+    <button id="add-habit-button"
+      class="mt-4 w-full rounded-2xl border border-dashed border-zinc-700 py-4 text-zinc-300 active:bg-zinc-900">
+      ＋ 習慣を追加
+    </button>
+  </div>
+
+  <!-- ===== 下のタブ（ふりかえり・設定は次に作る） ===== -->
+  <nav class="fixed bottom-0 inset-x-0 border-t border-zinc-800 bg-[#0b0b0d]/95 backdrop-blur pb-safe">
+    <div class="mx-auto max-w-md grid grid-cols-3 text-center text-xs">
+      <a class="tab tab-active">✅<br>ホーム</a>
+      <a class="tab opacity-40" title="準備中">📊<br>ふりかえり</a>
+      <a class="tab opacity-40" title="準備中">⚙️<br>設定</a>
+    </div>
+  </nav>
+
+  <!-- ===== 習慣の追加・編集ダイアログ ===== -->
+  <dialog id="habit-dialog" class="sheet">
+    <form id="habit-form" method="dialog" class="grid gap-4">
+      <h2 id="habit-dialog-title" class="text-lg font-bold">習慣を追加</h2>
+
+      <label class="grid gap-1">
+        <span class="text-sm text-zinc-400">名前</span>
+        <input id="habit-name" required maxlength="30" placeholder="例：水を8杯のむ" class="field">
+      </label>
+
+      <label class="grid gap-1">
+        <span class="text-sm text-zinc-400">絵文字</span>
+        <input id="habit-emoji" maxlength="4" placeholder="💧" class="field w-20 text-center text-xl">
+      </label>
+
+      <fieldset class="grid gap-1">
+        <legend class="text-sm text-zinc-400 mb-1">色</legend>
+        <div id="color-choices" class="flex gap-3 flex-wrap"></div>
+      </fieldset>
+
+      <div class="flex gap-2 pt-2">
+        <button type="button" id="habit-delete" class="hidden mr-auto rounded-xl px-4 py-3 text-red-400">削除</button>
+        <button type="button" id="habit-cancel" class="ml-auto rounded-xl px-4 py-3 text-zinc-400">キャンセル</button>
+        <button type="submit" class="rounded-xl bg-zinc-100 px-5 py-3 font-semibold text-zinc-900">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== 目標の入力ダイアログ ===== -->
+  <dialog id="goal-dialog" class="sheet">
+    <form id="goal-form" method="dialog" class="grid gap-4">
+      <h2 id="goal-dialog-title" class="text-lg font-bold"></h2>
+      <textarea id="goal-input" rows="3" maxlength="120" placeholder="例：ベンチプレス80kgを上げる" class="field"></textarea>
+      <div class="flex gap-2 justify-end">
+        <button type="button" id="goal-cancel" class="rounded-xl px-4 py-3 text-zinc-400">キャンセル</button>
+        <button type="submit" class="rounded-xl bg-zinc-100 px-5 py-3 font-semibold text-zinc-900">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

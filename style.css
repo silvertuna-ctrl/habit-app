@@ -1,0 +1,92 @@
+/* 何度も使う部品の見た目は、ここにまとめて書く */
+
+/* iPhoneのノッチ（画面上の黒い部分）やホームバーに重ならないようにする余白 */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* ----- 目標カード ----- */
+.goal-card {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #18181b;
+}
+.goal-card:active { background: #222226; }
+.goal-label { font-size: 12px; color: #a1a1aa; }
+.goal-text { font-size: 15px; font-weight: 600; line-height: 1.4; }
+.goal-text.is-empty { color: #52525b; font-weight: 400; }
+
+/* ----- 習慣の行 ----- */
+.habit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 16px;
+  background: #18181b;
+}
+.habit-emoji {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* 直近7日の小さな四角（ふりかえり画面のヒートマップの小さい版） */
+.week-dots { display: flex; gap: 3px; margin-top: 6px; }
+.week-dot { width: 10px; height: 10px; border-radius: 3px; background: #2a2a2e; }
+
+/* チェックボタン（丸） */
+.check-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  border: 2px solid #3f3f46;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0b0b0d;
+  flex-shrink: 0;
+  transition: transform 0.12s, background-color 0.12s;
+}
+.check-button:active { transform: scale(0.9); }
+
+/* ----- 下のタブ ----- */
+.tab { padding: 10px 0 8px; line-height: 1.6; color: #a1a1aa; }
+.tab-active { color: #f4f4f5; font-weight: 600; }
+
+/* ----- 下から出てくるダイアログ ----- */
+.sheet {
+  width: 100%;
+  max-width: 28rem;
+  margin: auto auto 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 24px 24px 0 0;
+  background: #18181b;
+  color: #f4f4f5;
+}
+.sheet::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+.field {
+  border-radius: 12px;
+  background: #0b0b0d;
+  border: 1px solid #3f3f46;
+  padding: 12px;
+  font-size: 16px; /* 16px未満だと、iPhoneで入力するときに画面が勝手にズームする */
+}
+.field:focus { outline: 2px solid #71717a; }
+
+.color-choice {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+}
+.color-choice[aria-checked="true"] { border-color: #f4f4f5; }
