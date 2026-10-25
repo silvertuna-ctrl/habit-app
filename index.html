@@ -29,7 +29,7 @@
     <!-- ===== ヘッダー：今日の日付 ===== -->
     <header class="pt-6 pb-4">
       <p id="today-label" class="text-sm text-zinc-400"></p>
-      <h1 class="text-2xl font-bold">今日の習慣</h1>
+      <h1 class="text-2xl font-bold">今日の習慣 <span id="perfect-badge" class="hidden" title="パーフェクトデー">👑</span></h1>
     </header>
 
     <!-- ===== 目標（いつも目に入るように一番上） ===== -->
@@ -78,6 +78,15 @@
       <h1 id="review-title" class="text-2xl font-bold"></h1>
     </header>
 
+    <!-- 1年のまとめ -->
+    <section id="review-summary" class="review-card mb-3 flex items-center gap-3">
+      <span class="text-3xl">👑</span>
+      <div>
+        <p class="text-xs text-zinc-400">パーフェクトデー（その日の習慣を全部できた日）</p>
+        <p class="text-xl font-bold"><span id="perfect-count">0</span><span class="text-sm font-normal text-zinc-400"> 日</span></p>
+      </div>
+    </section>
+
     <ul id="review-list" class="grid gap-3"></ul>
 
     <p id="review-empty" class="hidden text-center text-zinc-500 py-10 leading-relaxed">
@@ -98,6 +107,9 @@
       <button class="tab opacity-40" disabled title="準備中">⚙️<br>設定</button>
     </div>
   </nav>
+
+  <!-- ===== お祝いのメッセージ（上からふわっと出る） ===== -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <!-- ===== 習慣の追加・編集ダイアログ ===== -->
   <dialog id="habit-dialog" class="sheet">

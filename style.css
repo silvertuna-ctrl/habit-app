@@ -39,8 +39,11 @@
 }
 
 /* 直近7日の小さな四角（ふりかえり画面のヒートマップの小さい版） */
-.week-dots { display: flex; gap: 3px; margin-top: 6px; }
-.week-dot { width: 10px; height: 10px; border-radius: 3px; background: #2a2a2e; }
+.week-dots { display: flex; gap: 2px; margin-top: 4px; margin-left: -3px; }
+/* 四角はボタンになっている（タップで、その日の分をつけたり消したりできる） */
+.week-dot-button { padding: 3px; }
+.week-dot { display: block; width: 14px; height: 14px; border-radius: 4px; background: #2a2a2e; }
+.week-dot.is-today { outline: 1.5px solid #a1a1aa; outline-offset: 1px; }
 .week-dot.is-off { background: #1d1d20; } /* 予定のない日 */
 
 /* チェックボタン（丸） */
@@ -128,3 +131,64 @@
 /* 66日メーター */
 .meter { height: 6px; border-radius: 9999px; background: #2a2a2e; overflow: hidden; }
 .meter > span { display: block; height: 100%; border-radius: 9999px; }
+
+/* ----- チェックしたときの「ぽよん」 ----- */
+.pop { animation: pop 0.35s ease-out; }
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+/* ----- 紙ふぶき ----- */
+.confetti {
+  position: fixed;
+  width: 7px;
+  height: 10px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 60;
+  animation: confetti-fly var(--time, 0.9s) cubic-bezier(0.2, 0.7, 0.4, 1) forwards;
+}
+@keyframes confetti-fly {
+  to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
+}
+
+/* ----- お祝いのメッセージ ----- */
+.toast {
+  position: fixed;
+  left: 50%;
+  top: calc(16px + env(safe-area-inset-top));
+  z-index: 70;
+  transform: translate(-50%, -150%);
+  max-width: calc(100% - 32px);
+  padding: 12px 18px;
+  border-radius: 9999px;
+  background: #f4f4f5;
+  color: #0b0b0d;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.toast.is-show { transform: translate(-50%, 0); }
+
+/* ----- 節目のバッジ ----- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0b0b0d;
+}
+.badge.is-locked { background: #26262b !important; color: #52525b; font-weight: 400; }
+
+/* 動きを減らす設定にしている人には、アニメーションをしない */
+@media (prefers-reduced-motion: reduce) {
+  .pop, .confetti { animation: none; }
+  .toast { transition: none; }
+}

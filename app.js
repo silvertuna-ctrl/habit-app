@@ -16,6 +16,14 @@ const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
 // 習慣が身につくまでの平均日数（ロンドン大学の研究より）
 const HABIT_DAYS = 66;
 
+// あとから何日前までチェックできるか（ずるを防ぐため、1週間まで）
+const EDITABLE_DAYS = 7;
+
+// 節目のバッジ（やった回数の合計がこの数になったら、お祝いする）
+// 毎日の習慣と、週に何回かの習慣で、節目の数を変えている
+const MILESTONES_DAILY = [7, 21, 30, 66, 100, 200, 365];
+const MILESTONES_WEEKLY = [4, 12, 26, 52, 100];
+
 // ----- データの形 -----
 // {
 //   habits: [{
@@ -100,6 +108,35 @@ function streakUnit(habit) {
   if (habit.days.length === 7) return '日';
   if (habit.days.length === 1) return '週';
   return '回';
+}
+
+// 合計の単位。毎日なら「日」、それ以外は「回」
+function totalUnit(habit) {
+  return habit.days.length === 7 ? '日' : '回';
+}
+
+function milestonesFor(habit) {
+  return habit.days.length >= 5 ? MILESTONES_DAILY : MILESTONES_WEEKLY;
+}
+
+// ----- パーフェクトデー -----
+// その日に予定があった習慣を、全部できた日
+function isPerfectDay(date) {
+  const key = toKey(date);
+  const planned = state.habits.filter((h) => h.createdAt <= key && isScheduled(h, date));
+  return planned.length > 0 && planned.every((h) => h.doneDates.includes(key));
+}
+
+function countPerfectDays(year) {
+  const firstKey = state.habits.map((h) => h.createdAt).sort()[0];
+  if (!firstKey) return 0;
+  const from = firstKey > `${year}-01-01` ? fromKey(firstKey) : new Date(year, 0, 1);
+  const to = new Date(Math.min(today(), new Date(year, 11, 31)));
+  let count = 0;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    if (isPerfectDay(d)) count++;
+  }
+  return count;
 }
 
 // ----- 連続日数 -----
@@ -236,6 +273,7 @@ function renderHome() {
   $('progress-label').textContent = todays.length ? `${doneCount} / ${todays.length} できた` : '';
 
   $('empty-message').classList.toggle('hidden', state.habits.length > 0);
+  $('perfect-badge').classList.toggle('hidden', !isPerfectDay(now));
 }
 
 function habitRow(habit, todayKey) {
@@ -250,12 +288,20 @@ function habitRow(habit, todayKey) {
   }
 
   // 直近7日（左が6日前、右が今日）。予定のない日はうすく表示
+  // 四角はボタンになっていて、タップすると「その日にやった」をつけたり消したりできる
   const dots = [6, 5, 4, 3, 2, 1, 0].map((n) => {
     const d = addDays(today(), -n);
-    if (habit.doneDates.includes(toKey(d))) {
-      return `<span class="week-dot" style="background:${habit.color}"></span>`;
-    }
-    return `<span class="week-dot ${isScheduled(habit, d) ? '' : 'is-off'}"></span>`;
+    const key = toKey(d);
+    const isDoneDay = habit.doneDates.includes(key);
+    let cls = 'week-dot';
+    if (!isDoneDay && !isScheduled(habit, d)) cls += ' is-off';
+    if (n === 0) cls += ' is-today';
+    const label = `${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`;
+    return `
+      <button class="week-dot-button" data-toggle="${habit.id}" data-date="${key}"
+        aria-label="${label}：${isDoneDay ? 'やった' : 'まだ'}">
+        <span class="${cls}" ${isDoneDay ? `style="background:${habit.color}"` : ''}></span>
+      </button>`;
   }).join('');
 
   return `
@@ -296,6 +342,8 @@ function setGoalText(el, text) {
 function renderReview() {
   const year = today().getFullYear();
   $('review-title').textContent = `${year}年`;
+  $('perfect-count').textContent = countPerfectDays(year);
+  $('review-summary').classList.toggle('hidden', state.habits.length === 0);
 
   // 達成率が高い順に並べる
   const rows = state.habits
@@ -324,7 +372,7 @@ function renderReview() {
         <div class="heatmap">${heatmapCells(habit, year)}</div>
 
         <p class="mt-3 text-xs text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
-          <span>合計 <b class="text-zinc-100">${stats.total}</b>日</span>
+          <span>合計 <b class="text-zinc-100">${stats.total}</b>${totalUnit(habit)}</span>
           <span>最長 <b class="text-zinc-100">🔥 ${best}</b>${streakUnit(habit)}</span>
           <span>今週 ${week.planned
             ? `<b class="text-zinc-100">${week.done} / ${week.planned}</b>`
@@ -335,10 +383,23 @@ function renderReview() {
           <p class="text-xs text-zinc-400 mb-1">${meterText}</p>
           <div class="meter"><span style="width:${Math.min(days / HABIT_DAYS, 1) * 100}%;background:${habit.color}"></span></div>
         </div>
+
+        <div class="mt-3 flex flex-wrap gap-1.5">${badges(habit)}</div>
       </li>`;
   }).join('');
 
   $('review-empty').classList.toggle('hidden', state.habits.length > 0);
+}
+
+// 節目のバッジ。もらったものは習慣の色、まだのものは灰色
+// 合計はその年だけでなく、始めてからぜんぶの回数で数える
+function badges(habit) {
+  const total = habit.doneDates.length;
+  return milestonesFor(habit).map((n) => {
+    const got = total >= n;
+    return `<span class="badge ${got ? '' : 'is-locked'}" style="background:${habit.color}">
+      ${got ? '🏅' : ''}${n}${totalUnit(habit)}</span>`;
+  }).join('');
 }
 
 // 1年分のマスを作る。たて7マス（月〜日）で1列＝1週間
@@ -384,25 +445,131 @@ document.querySelectorAll('[data-tab]').forEach((tab) => {
 // =====================================================
 // チェックのオン・オフ
 // =====================================================
-function toggleToday(habitId) {
+// key：どの日の分か（'2026-10-25'）。button：押したボタン（紙ふぶきを出す場所）
+function toggleDay(habitId, key, button) {
   const habit = state.habits.find((h) => h.id === habitId);
   if (!habit) return;
-  const todayKey = toKey(today());
-  if (habit.doneDates.includes(todayKey)) {
-    habit.doneDates = habit.doneDates.filter((d) => d !== todayKey);
-  } else {
-    habit.doneDates.push(todayKey);
-    if (navigator.vibrate) navigator.vibrate(10); // 対応している端末なら少しブルッとさせる
+
+  // ずるを防ぐため、さかのぼれるのは1週間まで
+  const daysBack = Math.round((today() - fromKey(key)) / 86400000);
+  if (daysBack < 0 || daysBack >= EDITABLE_DAYS) return;
+
+  if (habit.doneDates.includes(key)) {
+    habit.doneDates = habit.doneDates.filter((d) => d !== key);
+    saveState();
+    render();
+    return;
   }
+
+  // 描き直すとボタンが作り直されるので、先に場所をおぼえておく
+  const rect = button.getBoundingClientRect();
+
+  // つける前の記録（あとで「記録更新したか」をくらべるため）
+  const bestBefore = getBestStreak(habit);
+  const date = fromKey(key);
+  const wasPerfect = isPerfectDay(date);
+
+  habit.doneDates.push(key);
+  // 始めた日より前の分をつけたら、始めた日もそこまでずらす
+  if (key < habit.createdAt) habit.createdAt = key;
   saveState();
   render();
+
+  celebrate(habit, key, rect, bestBefore, wasPerfect);
+}
+
+// =====================================================
+// お祝い（B1 紙ふぶき／B2 ベスト更新／B3 節目のバッジ／B4 パーフェクトデー）
+// =====================================================
+function celebrate(habit, key, rect, bestBefore, wasPerfect) {
+  if (navigator.vibrate) navigator.vibrate(10); // 対応している端末なら少しブルッとさせる
+
+  // 描き直したあとの新しいボタンを「ぽよん」とさせる
+  const selector = key === toKey(today())
+    ? `.check-button[data-toggle="${habit.id}"]`
+    : `[data-toggle="${habit.id}"][data-date="${key}"]`;
+  const newButton = document.querySelector(selector);
+  if (newButton) newButton.classList.add('pop');
+
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const messages = [];
+
+  // B3 節目のバッジ
+  const total = habit.doneDates.length;
+  if (milestonesFor(habit).includes(total)) {
+    messages.push(`🏅 ${habit.name} 合計${total}${totalUnit(habit)}！`);
+  }
+
+  // B2 ベスト更新（3より小さい記録は、まだ数えない）
+  const bestAfter = getBestStreak(habit);
+  if (bestAfter > bestBefore && bestBefore >= 3) {
+    messages.push(`🔥 最長記録 更新！ ${bestAfter}${streakUnit(habit)}`);
+  }
+
+  // B4 パーフェクトデー（その日の習慣が、今のチェックで全部そろった）
+  const isPerfect = !wasPerfect && isPerfectDay(fromKey(key));
+  if (isPerfect) {
+    messages.push(key === toKey(today()) ? '👑 パーフェクトデー！' : '👑 その日もパーフェクト！');
+  }
+
+  // B1 紙ふぶき。うれしいことが重なったら、画面いっぱいに
+  const big = messages.length > 0;
+  confetti(x, y, big ? COLORS : [habit.color], big ? 70 : 18);
+  messages.forEach(showToast);
+}
+
+function confetti(x, y, colors, count) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('span');
+    piece.className = 'confetti';
+    const angle = Math.random() * Math.PI * 2;
+    const power = (count > 20 ? 140 : 60) + Math.random() * (count > 20 ? 160 : 50);
+    piece.style.left = `${x}px`;
+    piece.style.top = `${y}px`;
+    piece.style.background = colors[i % colors.length];
+    piece.style.setProperty('--dx', `${Math.cos(angle) * power}px`);
+    piece.style.setProperty('--dy', `${Math.sin(angle) * power + 60}px`); // 少し下に落ちる
+    piece.style.setProperty('--rot', `${Math.random() * 720 - 360}deg`);
+    piece.style.setProperty('--time', `${0.7 + Math.random() * 0.6}s`);
+    piece.addEventListener('animationend', () => piece.remove());
+    document.body.appendChild(piece);
+  }
+}
+
+// お祝いのメッセージを、上から1つずつ順番に出す
+const toastQueue = [];
+let toastBusy = false;
+
+function showToast(message) {
+  toastQueue.push(message);
+  if (!toastBusy) nextToast();
+}
+
+function nextToast() {
+  const message = toastQueue.shift();
+  if (!message) {
+    toastBusy = false;
+    return;
+  }
+  toastBusy = true;
+  const toast = $('toast');
+  toast.textContent = message;
+  toast.classList.add('is-show');
+  setTimeout(() => {
+    toast.classList.remove('is-show');
+    setTimeout(nextToast, 400);
+  }, 2200);
 }
 
 // 一覧のクリックはまとめて受け取る（行が増えても1か所で済む）
 ['habit-list', 'rest-list'].forEach((id) => {
   $(id).addEventListener('click', (e) => {
     const toggle = e.target.closest('[data-toggle]');
-    if (toggle) return toggleToday(toggle.dataset.toggle);
+    if (toggle) {
+      return toggleDay(toggle.dataset.toggle, toggle.dataset.date || toKey(today()), toggle);
+    }
 
     const edit = e.target.closest('[data-edit]');
     if (edit) openHabitDialog(edit.dataset.edit);
