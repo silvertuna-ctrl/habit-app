@@ -2,6 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+  <!-- セキュリティ：このページで動かしていいプログラムの「出どころ」を決める。
+       自分のサイトと Tailwind の配布元（jsDelivr）以外のプログラムは動かさない -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
   <!-- viewport-fit=cover：iPhoneの画面のはしっこ（ノッチの下など）まで使う -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <!-- ホーム画面に追加したとき、アプリのように全画面で開くための設定 -->
@@ -32,6 +36,11 @@
       <h1 class="text-2xl font-bold">今日の習慣 <span id="perfect-badge" class="hidden" title="パーフェクトデー">👑</span></h1>
     </header>
 
+    <!-- ===== バックアップのお知らせ（しばらく保存していないとき） ===== -->
+    <button id="backup-reminder" class="hidden mb-3 w-full rounded-2xl bg-amber-300/10 px-4 py-3 text-left text-sm text-amber-200">
+      💾 しばらくバックアップしていません。タップして保存しましょう
+    </button>
+
     <!-- ===== 目標（いつも目に入るように一番上） ===== -->
     <section class="grid gap-2 mb-6">
       <button id="goal-month" class="goal-card" data-kind="month">
@@ -50,6 +59,11 @@
       <p id="progress-label" class="text-sm text-zinc-400"></p>
     </div>
 
+    <!-- ===== お休み券を使った日 ===== -->
+    <p id="rest-day-banner" class="hidden mb-2 rounded-2xl bg-zinc-900 px-4 py-3 text-sm text-zinc-300">
+      🛌 今日はお休みの日。連続は切れないので、ゆっくり休んでね
+    </p>
+
     <!-- ===== 習慣の一覧（app.js で中身を入れる） ===== -->
     <ul id="habit-list" class="grid gap-2"></ul>
 
@@ -67,6 +81,9 @@
       class="mt-4 w-full rounded-2xl border border-dashed border-zinc-700 py-4 text-zinc-300 active:bg-zinc-900">
       ＋ 習慣を追加
     </button>
+
+    <!-- ===== お休み券（旅行・体調不良の日に。月3枚まで） ===== -->
+    <button id="rest-ticket-button" class="hidden mt-3 w-full rounded-2xl py-3 text-sm text-zinc-400 active:bg-zinc-900"></button>
   </main>
 
   <!-- ============================================ -->
@@ -89,22 +106,63 @@
 
     <ul id="review-list" class="grid gap-3"></ul>
 
+    <!-- しまった習慣（やめた習慣も、記録は残す） -->
+    <section id="archived-section" class="hidden mt-8">
+      <h2 class="text-sm font-semibold text-zinc-500 mb-2">📦 しまった習慣</h2>
+      <ul id="archived-list" class="grid gap-3 opacity-60"></ul>
+    </section>
+
     <p id="review-empty" class="hidden text-center text-zinc-500 py-10 leading-relaxed">
       習慣を追加すると、ここに1年分の記録が並びます。
     </p>
 
     <p class="mt-6 text-xs text-zinc-500 leading-relaxed">
       1マス＝1日。たて7マスで1週間（上が月曜）。<br>
-      明るいマス＝やった日 ／ 暗いマス＝予定があった日 ／ うすいマス＝予定のない日
+      明るいマス＝やった日 ／ 暗いマス＝予定があった日 ／ うすいマス＝予定のない日 ／ 茶色のマス＝お休み券の日<br>
+      カードをタップすると、習慣の編集ができます
     </p>
   </main>
 
-  <!-- ===== 下のタブ（設定は次に作る） ===== -->
+  <!-- ============================================ -->
+  <!-- 設定画面                                       -->
+  <!-- ============================================ -->
+  <main id="view-settings" hidden class="mx-auto max-w-md min-h-dvh px-4 pt-safe pb-28">
+    <header class="pt-6 pb-4">
+      <p class="text-sm text-zinc-400">設定</p>
+      <h1 class="text-2xl font-bold">バックアップ</h1>
+    </header>
+
+    <section class="review-card grid gap-3">
+      <p class="text-sm text-zinc-300 leading-relaxed">
+        記録はこのiPhoneの中だけに保存されています。アプリを消したり機種変更したりすると消えてしまうので、ときどきファイルに保存しておきましょう。
+      </p>
+      <p class="text-xs text-zinc-500">最後に保存した日：<span id="last-backup">まだ保存していません</span></p>
+      <button id="export-button" class="rounded-xl bg-zinc-100 px-5 py-3 font-semibold text-zinc-900">💾 バックアップを保存する</button>
+      <p class="text-xs text-zinc-500 leading-relaxed">
+        共有メニューが出たら「"ファイル"に保存」→ OneDrive の <code>MyBrain/99_添付ファイル</code> などを選ぶと、Claudeが月次レポートに使えます。
+      </p>
+    </section>
+
+    <section class="review-card grid gap-3 mt-3">
+      <p class="text-sm text-zinc-300 leading-relaxed">
+        保存したファイルから、記録をもとに戻します。<b class="text-amber-300">今の記録は上書きされます。</b>
+      </p>
+      <label class="rounded-xl border border-zinc-700 px-5 py-3 text-center font-semibold text-zinc-200">
+        📂 バックアップから戻す
+        <input id="import-input" type="file" accept="application/json,.json" class="hidden">
+      </label>
+      <p class="text-xs text-zinc-500 leading-relaxed">
+        ⚠️ 自分で保存したファイルだけを読みこんでください。読みこむ前に、中身が正しい形かどうかをチェックします。
+      </p>
+    </section>
+  </main>
+
+  <!-- ===== 下のタブ ===== -->
   <nav class="fixed bottom-0 inset-x-0 border-t border-zinc-800 bg-[#0b0b0d]/95 backdrop-blur pb-safe">
     <div class="mx-auto max-w-md grid grid-cols-3 text-center text-xs">
       <button class="tab tab-active" data-tab="home">✅<br>ホーム</button>
       <button class="tab" data-tab="review">📊<br>ふりかえり</button>
-      <button class="tab opacity-40" disabled title="準備中">⚙️<br>設定</button>
+      <button class="tab" data-tab="settings">⚙️<br>設定</button>
     </div>
   </nav>
 
@@ -137,8 +195,20 @@
         <div id="color-choices" class="flex gap-3 flex-wrap"></div>
       </fieldset>
 
+      <label class="grid gap-1">
+        <span class="text-sm text-zinc-400">⏰ いつ・どこで・何のあとにやる？</span>
+        <input id="habit-cue" maxlength="40" placeholder="例：歯みがきのあとに、ベッドで" class="field">
+      </label>
+
+      <label class="grid gap-1">
+        <span class="text-sm text-zinc-400">🎯 何のため？（目標とつなぐ）</span>
+        <input id="habit-why" maxlength="40" list="goal-suggestions" placeholder="例：登録者1,000人" class="field">
+        <datalist id="goal-suggestions"></datalist>
+      </label>
+
       <div class="flex gap-2 pt-2">
-        <button type="button" id="habit-delete" class="hidden mr-auto rounded-xl px-4 py-3 text-red-400">削除</button>
+        <button type="button" id="habit-delete" class="hidden rounded-xl px-3 py-3 text-red-400">削除</button>
+        <button type="button" id="habit-archive" class="hidden mr-auto rounded-xl px-3 py-3 text-zinc-300">📦 しまう</button>
         <button type="button" id="habit-cancel" class="ml-auto rounded-xl px-4 py-3 text-zinc-400">キャンセル</button>
         <button type="submit" class="rounded-xl bg-zinc-100 px-5 py-3 font-semibold text-zinc-900">保存</button>
       </div>

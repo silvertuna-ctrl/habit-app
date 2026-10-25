@@ -2,3 +2,6 @@
 
 # Claude用のメモ（PCの中だけで使う）
 CLAUDE.md
+
+# Claude Code の自分用の設定（学習モード・確認用サーバー）
+.claude/

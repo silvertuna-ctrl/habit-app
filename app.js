@@ -1,5 +1,5 @@
 // =====================================================
-// 習慣アプリ（第1弾：ホーム画面・ふりかえり画面）
+// 習慣アプリ（ホーム・ふりかえり・設定）
 // データはブラウザの中（localStorage）に保存する
 // =====================================================
 
@@ -24,6 +24,12 @@ const EDITABLE_DAYS = 7;
 const MILESTONES_DAILY = [7, 21, 30, 66, 100, 200, 365];
 const MILESTONES_WEEKLY = [4, 12, 26, 52, 100];
 
+// お休み券（旅行・体調不良の日に使う）は、1か月に何枚まで使えるか
+const REST_TICKETS_PER_MONTH = 3;
+
+// 最後のバックアップから何日たったら、お知らせを出すか
+const BACKUP_REMIND_DAYS = 30;
+
 // ----- データの形 -----
 // {
 //   habits: [{
@@ -31,27 +37,97 @@ const MILESTONES_WEEKLY = [4, 12, 26, 52, 100];
 //     days: [1, 3, 5],          ← やる曜日（0=日曜 … 6=土曜）
 //     createdAt: '2026-10-25',  ← 始めた日
 //     doneDates: ['2026-10-25', ...],
+//     cue: '歯みがきのあとに',   ← いつ・どこで・何のあとにやるか
+//     why: '登録者1,000人',      ← 何のためにやるか（目標とのつながり）
+//     archivedAt: null,         ← しまった日（しまっていなければ null）
 //   }],
-//   goals: { month: { '2026-10': '...' }, year: { '2026': '...' } }
+//   goals: { month: { '2026-10': '...' }, year: { '2026': '...' } },
+//   restDays: ['2026-11-03'],   ← お休み券を使った日
+//   lastBackupAt: '2026-10-25', ← 最後にバックアップした日
 // }
 // 目標は「月ごと」「年ごと」に分けて残すので、あとでふりかえりに使える
+function emptyState() {
+  return { habits: [], goals: { month: {}, year: {} }, restDays: [], lastBackupAt: null };
+}
+
 function loadState() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved && Array.isArray(saved.habits)) {
-      saved.habits.forEach(fillMissingFields);
-      return saved;
-    }
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return sanitizeState(JSON.parse(saved));
   } catch (e) {
     console.warn('保存データを読み込めませんでした', e);
   }
-  return { habits: [], goals: { month: {}, year: {} } };
+  return emptyState();
 }
 
-// 前の版で作った習慣には「曜日」「始めた日」がないので、ここで足しておく
-function fillMissingFields(habit) {
-  if (!Array.isArray(habit.days) || habit.days.length === 0) habit.days = [...EVERY_DAY];
-  if (!habit.createdAt) habit.createdAt = [...habit.doneDates].sort()[0] || toKey(new Date());
+// =====================================================
+// セキュリティ：データの中身チェック
+// 保存データやバックアップのファイルを、決まった形・決まった文字だけに整える。
+// 変なデータ（悪い人が作ったファイルなど）がまざっていても、ここで捨てる。
+// 前の版で作った習慣にない項目（曜日・始めた日など）も、ここで足しておく。
+// =====================================================
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function cleanText(value, max) {
+  return typeof value === 'string' ? value.slice(0, max) : '';
+}
+
+function cleanDates(list) {
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.filter((d) => typeof d === 'string' && DATE_RE.test(d)))].sort();
+}
+
+function sanitizeHabit(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = cleanText(raw.name, 30).trim();
+  if (!name) return null;
+
+  const days = Array.isArray(raw.days)
+    ? [...new Set(raw.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
+    : [];
+  const doneDates = cleanDates(raw.doneDates);
+
+  return {
+    // id は画面の中の目印に使うので、英数字とハイフンだけにする
+    id: typeof raw.id === 'string' && /^[\w-]{1,64}$/.test(raw.id) ? raw.id : crypto.randomUUID(),
+    name,
+    emoji: cleanText(raw.emoji, 8),
+    // 色は決まった6色だけ（それ以外は1色目にする）
+    color: COLORS.includes(raw.color) ? raw.color : COLORS[0],
+    days: days.length ? days : [...EVERY_DAY],
+    createdAt: DATE_RE.test(raw.createdAt) ? raw.createdAt : (doneDates[0] || toKey(new Date())),
+    doneDates,
+    cue: cleanText(raw.cue, 40),
+    why: cleanText(raw.why, 40),
+    archivedAt: DATE_RE.test(raw.archivedAt) ? raw.archivedAt : null,
+  };
+}
+
+function sanitizeState(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.habits)) {
+    throw new Error('習慣アプリのデータの形ではありません');
+  }
+  const clean = emptyState();
+  clean.habits = raw.habits.slice(0, 200).map(sanitizeHabit).filter(Boolean);
+
+  // 同じ id が2つあったら、2つめは新しい id にする
+  const seen = new Set();
+  clean.habits.forEach((h) => {
+    if (seen.has(h.id)) h.id = crypto.randomUUID();
+    seen.add(h.id);
+  });
+
+  const goals = raw.goals && typeof raw.goals === 'object' ? raw.goals : {};
+  for (const [key, text] of Object.entries(goals.month || {})) {
+    if (/^\d{4}-\d{2}$/.test(key)) clean.goals.month[key] = cleanText(text, 120);
+  }
+  for (const [key, text] of Object.entries(goals.year || {})) {
+    if (/^\d{4}$/.test(key)) clean.goals.year[key] = cleanText(text, 120);
+  }
+
+  clean.restDays = cleanDates(raw.restDays);
+  clean.lastBackupAt = DATE_RE.test(raw.lastBackupAt) ? raw.lastBackupAt : null;
+  return clean;
 }
 
 function saveState() {
@@ -93,8 +169,27 @@ let state = loadState();
 // =====================================================
 // 習慣の計算（ホーム・ふりかえり・あとで作るエンドロールで使う）
 // =====================================================
+// その日が「予定の日」かどうか。
+// お休み券を使った日と、しまったあとの日は、予定なしとして数える（連続も切れない）
 function isScheduled(habit, date) {
+  const key = toKey(date);
+  if (habit.archivedAt && key >= habit.archivedAt) return false;
+  if (isRestDay(key)) return false;
   return habit.days.includes(date.getDay());
+}
+
+function isRestDay(key) {
+  return state.restDays.includes(key);
+}
+
+// 今使っている習慣（しまった習慣はのぞく）
+function activeHabits() {
+  return state.habits.filter((h) => !h.archivedAt);
+}
+
+// その月に使ったお休み券の枚数
+function restTicketsUsed(monthKey) {
+  return state.restDays.filter((d) => d.startsWith(monthKey)).length;
 }
 
 // 「毎日」「金曜」「月・水・金曜」のような表示
@@ -247,13 +342,15 @@ let currentView = 'home';
 
 function render() {
   if (currentView === 'home') renderHome();
-  else renderReview();
+  else if (currentView === 'review') renderReview();
+  else renderSettings();
 }
 
 // ----- ホーム画面 -----
 function renderHome() {
   const now = today();
   const todayKey = toKey(now);
+  const habits = activeHabits();
 
   $('today-label').textContent =
     `${now.getMonth() + 1}月${now.getDate()}日（${WEEKDAYS[now.getDay()]}）`;
@@ -261,8 +358,8 @@ function renderHome() {
   renderGoals(now);
 
   // 今日やる習慣と、今日は予定のない習慣に分ける
-  const todays = state.habits.filter((h) => isScheduled(h, now));
-  const rests = state.habits.filter((h) => !isScheduled(h, now));
+  const todays = habits.filter((h) => isScheduled(h, now));
+  const rests = habits.filter((h) => !isScheduled(h, now));
 
   $('habit-list').innerHTML = todays.map((h) => habitRow(h, todayKey)).join('');
   $('rest-list').innerHTML = rests.map((h) => habitRow(h, todayKey)).join('');
@@ -272,8 +369,26 @@ function renderHome() {
   const doneCount = todays.filter((h) => h.doneDates.includes(todayKey)).length;
   $('progress-label').textContent = todays.length ? `${doneCount} / ${todays.length} できた` : '';
 
-  $('empty-message').classList.toggle('hidden', state.habits.length > 0);
+  $('empty-message').classList.toggle('hidden', habits.length > 0);
   $('perfect-badge').classList.toggle('hidden', !isPerfectDay(now));
+
+  // お休み券
+  const restToday = isRestDay(todayKey);
+  const left = REST_TICKETS_PER_MONTH - restTicketsUsed(todayKey.slice(0, 7));
+  $('rest-day-banner').classList.toggle('hidden', !restToday);
+  const ticket = $('rest-ticket-button');
+  ticket.classList.toggle('hidden', habits.length === 0);
+  ticket.disabled = !restToday && left <= 0;
+  ticket.textContent = restToday
+    ? '🛌 お休み券を取り消す'
+    : `🛌 今日はお休み券を使う（今月あと${left}枚）`;
+
+  // バックアップのお知らせ：一度もしていない、または30日以上たった
+  const daysFromBackup = state.lastBackupAt
+    ? Math.round((now - fromKey(state.lastBackupAt)) / 86400000)
+    : Infinity;
+  const hasRecords = state.habits.some((h) => h.doneDates.length > 0);
+  $('backup-reminder').classList.toggle('hidden', !hasRecords || daysFromBackup < BACKUP_REMIND_DAYS);
 }
 
 function habitRow(habit, todayKey) {
@@ -294,7 +409,8 @@ function habitRow(habit, todayKey) {
     const key = toKey(d);
     const isDoneDay = habit.doneDates.includes(key);
     let cls = 'week-dot';
-    if (!isDoneDay && !isScheduled(habit, d)) cls += ' is-off';
+    if (!isDoneDay && isRestDay(key)) cls += ' is-rest';
+    else if (!isDoneDay && !isScheduled(habit, d)) cls += ' is-off';
     if (n === 0) cls += ' is-today';
     const label = `${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAYS[d.getDay()]}）`;
     return `
@@ -312,6 +428,7 @@ function habitRow(habit, todayKey) {
       <div class="flex-1 min-w-0" data-edit="${habit.id}">
         <p class="font-semibold truncate">${escapeHtml(habit.name)}</p>
         <p class="text-xs text-zinc-400 mt-0.5">${frequencyLabel(habit)} ・ ${streakText}</p>
+        ${habit.cue ? `<p class="text-xs text-zinc-500 mt-0.5 truncate">⏰ ${escapeHtml(habit.cue)}</p>` : ''}
         <div class="week-dots">${dots}</div>
       </div>
       <button class="check-button" data-toggle="${habit.id}"
@@ -346,49 +463,66 @@ function renderReview() {
   $('review-summary').classList.toggle('hidden', state.habits.length === 0);
 
   // 達成率が高い順に並べる
-  const rows = state.habits
+  const byRate = (list) => list
     .map((habit) => ({ habit, stats: getYearStats(habit, year) }))
     .sort((a, b) => b.stats.rate - a.stats.rate);
 
-  $('review-list').innerHTML = rows.map(({ habit, stats }) => {
-    const week = getWeekStats(habit);
-    const best = getBestStreak(habit);
-    const days = daysSinceStart(habit);
-    const meterText = days >= HABIT_DAYS
-      ? '🎓 66日たった！もう習慣になってきたころ'
-      : `習慣が身につくまで ${days} / ${HABIT_DAYS}日`;
-
-    return `
-      <li class="review-card">
-        <div class="flex items-center gap-3">
-          <span class="habit-emoji" style="background:${habit.color}26">${escapeHtml(habit.emoji || '⭐')}</span>
-          <div class="flex-1 min-w-0">
-            <p class="font-semibold truncate">${escapeHtml(habit.name)}</p>
-            <p class="text-xs text-zinc-400">${frequencyLabel(habit)}</p>
-          </div>
-          <p class="text-2xl font-bold" style="color:${habit.color}">${stats.rate}<span class="text-sm">%</span></p>
-        </div>
-
-        <div class="heatmap">${heatmapCells(habit, year)}</div>
-
-        <p class="mt-3 text-xs text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
-          <span>合計 <b class="text-zinc-100">${stats.total}</b>${totalUnit(habit)}</span>
-          <span>最長 <b class="text-zinc-100">🔥 ${best}</b>${streakUnit(habit)}</span>
-          <span>今週 ${week.planned
-            ? `<b class="text-zinc-100">${week.done} / ${week.planned}</b>`
-            : '予定なし'}</span>
-        </p>
-
-        <div class="mt-3">
-          <p class="text-xs text-zinc-400 mb-1">${meterText}</p>
-          <div class="meter"><span style="width:${Math.min(days / HABIT_DAYS, 1) * 100}%;background:${habit.color}"></span></div>
-        </div>
-
-        <div class="mt-3 flex flex-wrap gap-1.5">${badges(habit)}</div>
-      </li>`;
-  }).join('');
+  const archived = state.habits.filter((h) => h.archivedAt);
+  $('review-list').innerHTML = byRate(activeHabits()).map((row) => reviewCard(row, year)).join('');
+  $('archived-list').innerHTML = byRate(archived).map((row) => reviewCard(row, year)).join('');
+  $('archived-section').classList.toggle('hidden', archived.length === 0);
 
   $('review-empty').classList.toggle('hidden', state.habits.length > 0);
+}
+
+function reviewCard({ habit, stats }, year) {
+  const week = getWeekStats(habit);
+  const best = getBestStreak(habit);
+  const days = daysSinceStart(habit);
+  const meterText = days >= HABIT_DAYS
+    ? '🎓 66日たった！もう習慣になってきたころ'
+    : `習慣が身につくまで ${days} / ${HABIT_DAYS}日`;
+
+  return `
+    <li class="review-card" data-edit="${habit.id}">
+      <div class="flex items-center gap-3">
+        <span class="habit-emoji" style="background:${habit.color}26">${escapeHtml(habit.emoji || '⭐')}</span>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold truncate">${escapeHtml(habit.name)}</p>
+          <p class="text-xs text-zinc-400">${habit.archivedAt
+            ? `📦 ${fromKey(habit.archivedAt).getMonth() + 1}/${fromKey(habit.archivedAt).getDate()}にしまった`
+            : frequencyLabel(habit)}</p>
+        </div>
+        <p class="text-2xl font-bold" style="color:${habit.color}">${stats.rate}<span class="text-sm">%</span></p>
+      </div>
+
+      ${habit.why ? `<p class="mt-2 text-xs text-zinc-300">🎯 ${escapeHtml(habit.why)} のため</p>` : ''}
+
+      <div class="heatmap">${heatmapCells(habit, year)}</div>
+
+      <p class="mt-3 text-xs text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
+        <span>合計 <b class="text-zinc-100">${stats.total}</b>${totalUnit(habit)}</span>
+        <span>最長 <b class="text-zinc-100">🔥 ${best}</b>${streakUnit(habit)}</span>
+        ${habit.archivedAt ? '' : `<span>今週 ${week.planned
+          ? `<b class="text-zinc-100">${week.done} / ${week.planned}</b>`
+          : '予定なし'}</span>`}
+      </p>
+
+      ${habit.archivedAt ? '' : `
+      <div class="mt-3">
+        <p class="text-xs text-zinc-400 mb-1">${meterText}</p>
+        <div class="meter"><span style="width:${Math.min(days / HABIT_DAYS, 1) * 100}%;background:${habit.color}"></span></div>
+      </div>`}
+
+      <div class="mt-3 flex flex-wrap gap-1.5">${badges(habit)}</div>
+    </li>`;
+}
+
+// ----- 設定画面 -----
+function renderSettings() {
+  $('last-backup').textContent = state.lastBackupAt
+    ? state.lastBackupAt.replace(/-/g, '/')
+    : 'まだ保存していません';
 }
 
 // 節目のバッジ。もらったものは習慣の色、まだのものは灰色
@@ -419,6 +553,7 @@ function heatmapCells(habit, year) {
     if (d.getFullYear() !== year) cls += ' is-blank';
     else if (done.has(key)) style = `background:${habit.color}`;
     else if (d < start || d > today()) cls += ' is-future';
+    else if (isRestDay(key)) cls += ' is-rest';
     else if (!isScheduled(habit, d)) cls += ' is-off';
     if (key === todayKey) cls += ' is-today';
     cells.push(`<span class="${cls}" style="${style}" title="${key}"></span>`);
@@ -431,6 +566,7 @@ function showView(name) {
   currentView = name;
   $('view-home').hidden = name !== 'home';
   $('view-review').hidden = name !== 'review';
+  $('view-settings').hidden = name !== 'settings';
   document.querySelectorAll('[data-tab]').forEach((tab) => {
     tab.classList.toggle('tab-active', tab.dataset.tab === name);
   });
@@ -576,6 +712,33 @@ function nextToast() {
   });
 });
 
+// ふりかえりのカードをタップしたら、編集（しまった習慣を戻すのもここから）
+['review-list', 'archived-list'].forEach((id) => {
+  $(id).addEventListener('click', (e) => {
+    const card = e.target.closest('[data-edit]');
+    if (card) openHabitDialog(card.dataset.edit);
+  });
+});
+
+// =====================================================
+// お休み券（C3）
+// 旅行や体調不良の日に使う。その日はどの習慣も「予定なし」になり、連続が切れない。
+// 使いすぎないように、1か月に3枚まで。
+// =====================================================
+$('rest-ticket-button').addEventListener('click', () => {
+  const key = toKey(today());
+  if (isRestDay(key)) {
+    state.restDays = state.restDays.filter((d) => d !== key);
+  } else {
+    if (restTicketsUsed(key.slice(0, 7)) >= REST_TICKETS_PER_MONTH) return;
+    if (!confirm('今日はお休み券を使いますか？\n今日の習慣はお休みになり、連続は切れません。')) return;
+    state.restDays.push(key);
+    state.restDays.sort();
+  }
+  saveState();
+  render();
+});
+
 // =====================================================
 // 習慣の追加・編集
 // =====================================================
@@ -628,7 +791,17 @@ function openHabitDialog(habitId = null) {
   // 新しい習慣は、まだ使っていない色を自動で選ぶ
   selectedColor = habit ? habit.color : COLORS[state.habits.length % COLORS.length];
   selectedDays = new Set(habit ? habit.days : EVERY_DAY);
+  $('habit-cue').value = habit ? habit.cue : '';
+  $('habit-why').value = habit ? habit.why : '';
   $('habit-delete').classList.toggle('hidden', !habit);
+  $('habit-archive').classList.toggle('hidden', !habit);
+  $('habit-archive').textContent = habit && habit.archivedAt ? '↩️ もとに戻す' : '📦 しまう';
+
+  // 「何のため？」の入力候補に、これまでに書いた目標を出す
+  const goalTexts = [...Object.values(state.goals.year), ...Object.values(state.goals.month)]
+    .filter(Boolean);
+  $('goal-suggestions').innerHTML = [...new Set(goalTexts)]
+    .map((text) => `<option value="${escapeHtml(text)}"></option>`).join('');
 
   renderColorChoices();
   renderDayChoices();
@@ -648,10 +821,12 @@ $('habit-form').addEventListener('submit', (e) => {
   }
   const emoji = $('habit-emoji').value.trim();
   const days = [...selectedDays].sort();
+  const cue = $('habit-cue').value.trim();
+  const why = $('habit-why').value.trim();
 
   if (editingId) {
     const habit = state.habits.find((h) => h.id === editingId);
-    Object.assign(habit, { name, emoji, color: selectedColor, days });
+    Object.assign(habit, { name, emoji, color: selectedColor, days, cue, why });
   } else {
     state.habits.push({
       id: crypto.randomUUID(),
@@ -661,10 +836,28 @@ $('habit-form').addEventListener('submit', (e) => {
       days,
       createdAt: toKey(today()),
       doneDates: [],
+      cue,
+      why,
+      archivedAt: null,
     });
   }
   saveState();
   render();
+});
+
+// しまう（A3）：ホームからは消えるけど、記録はふりかえりに残る。いつでも戻せる
+$('habit-archive').addEventListener('click', () => {
+  const habit = state.habits.find((h) => h.id === editingId);
+  if (!habit) return;
+  if (habit.archivedAt) {
+    habit.archivedAt = null;
+  } else {
+    if (!confirm(`「${habit.name}」をしまいますか？\nホームからは消えますが、記録はふりかえりに残ります。`)) return;
+    habit.archivedAt = toKey(today());
+  }
+  saveState();
+  render();
+  $('habit-dialog').close();
 });
 
 $('habit-delete').addEventListener('click', () => {
@@ -705,6 +898,75 @@ $('goal-form').addEventListener('submit', () => {
   state.goals[editingGoalKind][goalKey(editingGoalKind)] = $('goal-input').value.trim();
   saveState();
   render();
+});
+
+// =====================================================
+// バックアップ（A2）
+// =====================================================
+async function exportBackup() {
+  const key = toKey(today());
+  const json = JSON.stringify({ app: 'habit-app', version: 1, exportedAt: key, ...state, lastBackupAt: key }, null, 2);
+  const fileName = `habit-backup-${key}.json`;
+  const file = new File([json], fileName, { type: 'application/json' });
+
+  try {
+    // iPhoneでは共有メニューを出す（「"ファイル"に保存」やOneDriveを選べる）
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: fileName });
+    } else {
+      // PCなどでは、ふつうにダウンロードする
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return; // 共有メニューを閉じただけ
+    alert('保存できませんでした。もう一度ためしてください。');
+    return;
+  }
+
+  state.lastBackupAt = key;
+  saveState();
+  render();
+  showToast('💾 バックアップを保存しました');
+}
+
+$('export-button').addEventListener('click', exportBackup);
+$('backup-reminder').addEventListener('click', () => showView('settings'));
+
+$('import-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // 同じファイルをもう一度選べるようにする
+  if (!file) return;
+
+  // 大きすぎるファイルは読まない（ふつうのバックアップは数十KB）
+  if (file.size > 2 * 1024 * 1024) {
+    alert('ファイルが大きすぎます。習慣アプリのバックアップか確認してください。');
+    return;
+  }
+
+  let imported;
+  try {
+    const raw = JSON.parse(await file.text());
+    if (raw.app !== 'habit-app') throw new Error('習慣アプリのファイルではありません');
+    imported = sanitizeState(raw); // ← ここで中身をきびしくチェックする
+  } catch (err) {
+    alert(`読みこめませんでした：${err.message}`);
+    return;
+  }
+
+  const doneCount = imported.habits.reduce((sum, h) => sum + h.doneDates.length, 0);
+  const message = `このファイルには、習慣${imported.habits.length}個・記録${doneCount}件が入っています。\n`
+    + '今の記録を上書きして、もとに戻しますか？';
+  if (!confirm(message)) return;
+
+  state = imported;
+  saveState();
+  showView('home');
+  showToast('📂 バックアップから戻しました');
 });
 
 // アプリを開いたまま日付が変わったときや、別のアプリから戻ってきたときに描き直す
