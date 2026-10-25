@@ -263,3 +263,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 render();
+
+// =====================================================
+// オフライン対応：お留守番係（sw.js）を登録する
+// =====================================================
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch((e) => {
+    console.warn('オフライン対応の準備に失敗しました', e);
+  });
+}
