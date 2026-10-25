@@ -21,7 +21,10 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-[#0b0b0d] text-zinc-100 antialiased">
-  <div class="mx-auto max-w-md min-h-dvh px-4 pt-safe pb-28">
+  <!-- ============================================ -->
+  <!-- ホーム画面                                     -->
+  <!-- ============================================ -->
+  <main id="view-home" class="mx-auto max-w-md min-h-dvh px-4 pt-safe pb-28">
 
     <!-- ===== ヘッダー：今日の日付 ===== -->
     <header class="pt-6 pb-4">
@@ -54,18 +57,45 @@
       まだ習慣がありません。<br>下のボタンから追加しましょう！
     </p>
 
+    <!-- ===== 今日は予定のない習慣（週1回の習慣など） ===== -->
+    <div id="rest-section" class="hidden mt-6">
+      <h2 class="text-sm font-semibold text-zinc-500 mb-2">今日は予定なし（やったらチェックしてもOK）</h2>
+      <ul id="rest-list" class="grid gap-2 opacity-60"></ul>
+    </div>
+
     <button id="add-habit-button"
       class="mt-4 w-full rounded-2xl border border-dashed border-zinc-700 py-4 text-zinc-300 active:bg-zinc-900">
       ＋ 習慣を追加
     </button>
-  </div>
+  </main>
 
-  <!-- ===== 下のタブ（ふりかえり・設定は次に作る） ===== -->
+  <!-- ============================================ -->
+  <!-- ふりかえり画面                                 -->
+  <!-- ============================================ -->
+  <main id="view-review" hidden class="mx-auto max-w-md min-h-dvh px-4 pt-safe pb-28">
+    <header class="pt-6 pb-4">
+      <p class="text-sm text-zinc-400">ふりかえり</p>
+      <h1 id="review-title" class="text-2xl font-bold"></h1>
+    </header>
+
+    <ul id="review-list" class="grid gap-3"></ul>
+
+    <p id="review-empty" class="hidden text-center text-zinc-500 py-10 leading-relaxed">
+      習慣を追加すると、ここに1年分の記録が並びます。
+    </p>
+
+    <p class="mt-6 text-xs text-zinc-500 leading-relaxed">
+      1マス＝1日。たて7マスで1週間（上が月曜）。<br>
+      明るいマス＝やった日 ／ 暗いマス＝予定があった日 ／ うすいマス＝予定のない日
+    </p>
+  </main>
+
+  <!-- ===== 下のタブ（設定は次に作る） ===== -->
   <nav class="fixed bottom-0 inset-x-0 border-t border-zinc-800 bg-[#0b0b0d]/95 backdrop-blur pb-safe">
     <div class="mx-auto max-w-md grid grid-cols-3 text-center text-xs">
-      <a class="tab tab-active">✅<br>ホーム</a>
-      <a class="tab opacity-40" title="準備中">📊<br>ふりかえり</a>
-      <a class="tab opacity-40" title="準備中">⚙️<br>設定</a>
+      <button class="tab tab-active" data-tab="home">✅<br>ホーム</button>
+      <button class="tab" data-tab="review">📊<br>ふりかえり</button>
+      <button class="tab opacity-40" disabled title="準備中">⚙️<br>設定</button>
     </div>
   </nav>
 
@@ -83,6 +113,12 @@
         <span class="text-sm text-zinc-400">絵文字</span>
         <input id="habit-emoji" maxlength="4" placeholder="💧" class="field w-20 text-center text-xl">
       </label>
+
+      <fieldset class="grid gap-1">
+        <legend class="text-sm text-zinc-400 mb-1">やる曜日</legend>
+        <div id="day-choices" class="flex gap-1.5"></div>
+        <button type="button" id="day-all" class="justify-self-start mt-1 text-xs text-zinc-400 underline">毎日にする</button>
+      </fieldset>
 
       <fieldset class="grid gap-1">
         <legend class="text-sm text-zinc-400 mb-1">色</legend>
